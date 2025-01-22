@@ -1,40 +1,87 @@
-# TB
-from aiogram import Bot, Dispatcher, types
-from aiogram.utils import executor
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-bot = Bot(token='')
-dp = Dispatcher(bot)
-# Создаем первую клавиатуру
-button_save = KeyboardButton('Сохранить логин и пароль')
-button_return = KeyboardButton('Узнать логин и пароль')
-keyboard1 = ReplyKeyboardMarkup(resize_keyboard=True).add(button_save, button_return)
-# Создаем вторую клавиатуру
-button_yes = KeyboardButton('Да')
-button_no = KeyboardButton('Нет')
-keyboard2 = ReplyKeyboardMarkup(resize_keyboard=True).add(button_yes, button_no)
-@dp.message_handler(commands=['start'])
-async def send_welcome(message: types.Message):
-    await message.reply("Привет! Выберите опцию:", reply_markup=keyboard1)
-@dp.message_handler(lambda message: message.text.lower() == 'привет')
-async def handle_hi(message: types.Message):
-    await message.reply("Что вы хотите сделать?", reply_markup=keyboard1)
-@dp.message_handler(lambda message: message.text == 'Сохранить логин и пароль')
-async def handle_hi(message: types.Message):
-    await message.reply("Введи название сайта")
+import logging
+from telegram import Update, ForceReply
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+import sqlite3
+
+# Настройка логирования
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+
+# Создание базы данных
+def create_db():
+    conn = sqlite3.connect('fitness_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            user_id INTEGER PRIMARY KEY,
+            subscription INTEGER DEFAULT 0
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+# Команда /start
+def start(update: Update, context: CallbackContext) -> None:
+    user_id = update.effective_user.id
+    conn = sqlite3.connect('fitness_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (user_id,))
+    conn.commit()
+    conn.close()
     
-@dp.message_handler(lambda message: '.ru' in message.text)
-async def save_pas(message: types.Message):
-    f = open('user pasword.txt','a',encoding = 'ANSI')
-    f.write(f'{message.from_user.id} {message.text}\n')
-    f.close()
-@dp.message_handler(lambda message: message.text.lower() == 'пока')
-async def handle_bye(message: types.Message):
-    await message.reply("До свидания!", reply_markup=types.ReplyKeyboardRemove())
-@dp.message_handler(lambda message: message.text.lower() in ['да', 'нет'])
-async def handle_yes_no(message: types.Message):
-    if message.text.lower() == 'да':
-        await message.reply("Вы выбрали 'Да'.", reply_markup=keyboard1)
+    update.message.reply_text('Добро пожаловать! Используйте /subscribe для подписки на фитнес советы.')
+
+# Команда /subscribe
+def subscribe(update: Update, context: CallbackContext) -> None:
+    user_id = update.effective_user.id
+    conn = sqlite3.connect('fitness_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('UPDATE users SET subscription = 1 WHERE user_id = ?', (user_id,))
+    conn.commit()
+    conn.close()
+    
+    update.message.reply_text('Вы подписались на платные фитнес советы!')
+
+# Команда /unsubscribe
+def unsubscribe(update: Update, context: CallbackContext) -> None:
+    user_id = update.effective_user.id
+    conn = sqlite3.connect('fitness_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('UPDATE users SET subscription = 0 WHERE user_id = ?', (user_id,))
+    conn.commit()
+    conn.close()
+    
+    update.message.reply_text('Вы отписались от платных фитнес советов.')
+
+# Команда /exercises
+def exercises(update: Update, context: CallbackContext) -> None:
+    user_id = update.effective_user.id
+    conn = sqlite3.connect('fitness_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT subscription FROM users WHERE user_id = ?', (user_id,))
+    subscription = cursor.fetchone()[0]
+    conn.close()
+    
+    if subscription:
+        update.message.reply_text('Вот Ваши упражнения для набора/сброса веса: [Список упражнений]')
     else:
-        await message.reply("Вы выбрали 'Нет'.", reply_markup=keyboard1)
+        update.message.reply_text('Подпишитесь, чтобы получить доступ к большему количеству упражнений!')
+
+def main() -> None:
+    create_db()
+    updater = Updater("YOUR_TOKEN_HERE")
+
+    # Получаем диспетчер для регистрации обработчиков
+    dispatcher = updater.dispatcher
+
+    # Регистрация обработчиков команд
+    dispatcher.add_handler(CommandHandler("start", start))
+    dispatcher.add_handler(CommandHandler("subscribe", subscribe))
+    dispatcher.add_handler(CommandHandler("unsubscribe", unsubscribe))
+    dispatcher.add_handler(CommandHandler("exercises", exercises))
+
+    # Запуск бота
+    updater.start_polling()
+    updater.idle()
+
 if __name__ == '__main__':
-    executor.start_polling(dp, skip_updates=True)
+    main()

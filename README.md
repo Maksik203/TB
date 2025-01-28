@@ -1,5 +1,5 @@
 import logging
-from telegram import Update, ForceReply
+from telegram import Update, ForceReply, InputFile
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 import sqlite3
 
@@ -66,6 +66,22 @@ def exercises(update: Update, context: CallbackContext) -> None:
     else:
         update.message.reply_text('Подпишитесь, чтобы получить доступ к большему количеству упражнений!')
 
+# Новая команда /send_video
+def send_video(update: Update, context: CallbackContext) -> None:
+    user_id = update.effective_user.id
+    conn = sqlite3.connect('fitness_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT subscription FROM users WHERE user_id = ?', (user_id,))
+    subscription = cursor.fetchone()[0]
+    conn.close()
+    
+    if subscription:
+        video_path = 'path/to/your/video.mp4'  # Укажите путь к Вашему видео
+        with open(video_path, 'rb') as video:
+            update.message.reply_video(video=InputFile(video), caption='Вот Ваше видео с упражнениями!')
+    else:
+        update.message.reply_text('Подпишитесь, чтобы получить доступ к видео!')
+
 def main() -> None:
     create_db()
     updater = Updater("YOUR_TOKEN_HERE")
@@ -78,6 +94,7 @@ def main() -> None:
     dispatcher.add_handler(CommandHandler("subscribe", subscribe))
     dispatcher.add_handler(CommandHandler("unsubscribe", unsubscribe))
     dispatcher.add_handler(CommandHandler("exercises", exercises))
+    dispatcher.add_handler(CommandHandler("send_video", send_video))  # Регистрация новой команды
 
     # Запуск бота
     updater.start_polling()

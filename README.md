@@ -1,6 +1,7 @@
 import logging
-from telegram import Update, ForceReply, InputFile
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from aiogram import Bot, Dispatcher, types
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from aiogram.utils import executor
 import sqlite3
 
 # Настройка логирования
@@ -19,42 +20,52 @@ def create_db():
     conn.commit()
     conn.close()
 
+# Инициализация бота и диспетчера
+API_TOKEN = "YOUR_API_TOKEN"  # Замените на Ваш токен
+bot = Bot(token=API_TOKEN)
+storage = MemoryStorage()
+dp = Dispatcher(bot, storage=storage)
+
 # Команда /start
-def start(update: Update, context: CallbackContext) -> None:
-    user_id = update.effective_user.id
+@dp.message_handler(commands=['start'])
+async def start(message: types.Message):
+    user_id = message.from_user.id
     conn = sqlite3.connect('fitness_bot.db')
     cursor = conn.cursor()
     cursor.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (user_id,))
     conn.commit()
     conn.close()
     
-    update.message.reply_text('Добро пожаловать! Используйте /subscribe для подписки на фитнес советы.')
+    await message.reply('Добро пожаловать! Используйте /subscribe для подписки на фитнес советы.')
 
 # Команда /subscribe
-def subscribe(update: Update, context: CallbackContext) -> None:
-    user_id = update.effective_user.id
+@dp.message_handler(commands=['subscribe'])
+async def subscribe(message: types.Message):
+    user_id = message.from_user.id
     conn = sqlite3.connect('fitness_bot.db')
     cursor = conn.cursor()
     cursor.execute('UPDATE users SET subscription = 1 WHERE user_id = ?', (user_id,))
     conn.commit()
     conn.close()
     
-    update.message.reply_text('Вы подписались на платные фитнес советы!')
+    await message.reply('Вы подписались на платные фитнес советы!')
 
 # Команда /unsubscribe
-def unsubscribe(update: Update, context: CallbackContext) -> None:
-    user_id = update.effective_user.id
+@dp.message_handler(commands=['unsubscribe'])
+async def unsubscribe(message: types.Message):
+    user_id = message.from_user.id
     conn = sqlite3.connect('fitness_bot.db')
     cursor = conn.cursor()
     cursor.execute('UPDATE users SET subscription = 0 WHERE user_id = ?', (user_id,))
     conn.commit()
     conn.close()
     
-    update.message.reply_text('Вы отписались от платных фитнес советов.')
+    await message.reply('Вы отписались от платных фитнес советов.')
 
 # Команда /exercises
-def exercises(update: Update, context: CallbackContext) -> None:
-    user_id = update.effective_user.id
+@dp.message_handler(commands=['exercises'])
+async def exercises(message: types.Message):
+    user_id = message.from_user.id
     conn = sqlite3.connect('fitness_bot.db')
     cursor = conn.cursor()
     cursor.execute('SELECT subscription FROM users WHERE user_id = ?', (user_id,))
@@ -62,13 +73,14 @@ def exercises(update: Update, context: CallbackContext) -> None:
     conn.close()
     
     if subscription:
-        update.message.reply_text('Вот Ваши упражнения для набора/сброса веса: [Список упражнений]')
+        await message.reply('Вот Ваши упражнения для набора/сброса веса: [Список упражнений]')
     else:
-        update.message.reply_text('Подпишитесь, чтобы получить доступ к большему количеству упражнений!')
+        await message.reply('Подпишитесь, чтобы получить доступ к большему количеству упражнений!')
 
 # Новая команда /send_video
-def send_video(update: Update, context: CallbackContext) -> None:
-    user_id = update.effective_user.id
+@dp.message_handler(commands=['send_video'])
+async def send_video(message: types.Message):
+    user_id = message.from_user.id
     conn = sqlite3.connect('fitness_bot.db')
     cursor = conn.cursor()
     cursor.execute('SELECT subscription FROM users WHERE user_id = ?', (user_id,))
@@ -78,27 +90,10 @@ def send_video(update: Update, context: CallbackContext) -> None:
     if subscription:
         video_path = 'path/to/your/video.mp4'  # Укажите путь к Вашему видео
         with open(video_path, 'rb') as video:
-            update.message.reply_video(video=InputFile(video), caption='Вот Ваше видео с упражнениями!')
+            await message.reply_video(video=video, caption='Вот Ваше видео с упражнениями!')
     else:
-        update.message.reply_text('Подпишитесь, чтобы получить доступ к видео!')
-
-def main() -> None:
-    create_db()
-    updater = Updater("YOUR_TOKEN_HERE")
-
-    # Получаем диспетчер для регистрации обработчиков
-    dispatcher = updater.dispatcher
-
-    # Регистрация обработчиков команд
-    dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(CommandHandler("subscribe", subscribe))
-    dispatcher.add_handler(CommandHandler("unsubscribe", unsubscribe))
-    dispatcher.add_handler(CommandHandler("exercises", exercises))
-    dispatcher.add_handler(CommandHandler("send_video", send_video))  # Регистрация новой команды
-
-    # Запуск бота
-    updater.start_polling()
-    updater.idle()
+        await message.reply('Подпишитесь, чтобы получить доступ к видео!')
 
 if __name__ == '__main__':
-    main()
+    create_db()
+    executor.start_polling(dp, skip_updates=True)

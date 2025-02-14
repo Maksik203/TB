@@ -5,7 +5,7 @@ from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher import filters
 from aiogram.utils import executor
 
-API_TOKEN = ''
+API_TOKEN = '7927202797:AAFxl7ZdIrZd-_61ZiYObNOJr4INwYsJekQ'
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
